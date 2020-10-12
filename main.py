@@ -9,10 +9,10 @@ import io
 import sys
 import json
 import psycopg2
-from typing import Iterable, Union, Optional
+from typing import Iterable, Union, Optional, List
 
-AttachmentListType = Optional[Iterable[Union[str, dict]]]
-RecipientListType = Union[Iterable[str], str]
+AttachmentListType = Union[Iterable[Union[str, dict]], dict, str]
+RecipientListType = Union[List[str], str]
 
 
 def get_logging_conn(host: str, port: Union[str, int], database: str, username: str, password: str):
@@ -25,7 +25,7 @@ def get_logging_conn(host: str, port: Union[str, int], database: str, username: 
     )
 
 
-def get_exchangelib_account(access_account: str=None, inbox_account: Optional[str]=None, password: str=None, defines: dict={}):
+def get_exchangelib_account(access_account: str, inbox_account: str, password: str, defines: dict):
     """
     :param access_account: the name of the email addr you are accessing from
     :inbox_account: the name of the email addr that will appear in the from. If None, then it defaults to access_account
@@ -62,7 +62,7 @@ def get_exchangelib_account(access_account: str=None, inbox_account: Optional[st
         raise AttributeError("It seems like the username is wrong")
 
 
-def _send(access_account: str, sending_email: str, password: str, subject: str, max_send_interval: Optional[int], body: str, recipients: dict, importance: str, attachments: AttachmentListType, defines: dict):
+def _send(access_account: str, sending_email: str, password: str, subject: str, max_send_interval: str, body: str, recipients: dict, importance: str, attachments: Iterable[dict], defines: dict):
     def check_already_sent(account, interval, subject):
         tz = exchangelib.EWSTimeZone.localzone()
         if interval == "daily":
@@ -116,7 +116,7 @@ def _send(access_account: str, sending_email: str, password: str, subject: str, 
         raise ValueError("Couldn't send email to server")
 
 
-def process_email_addresses(account_email: str, sending_email: Optional[str], to_list: RecipientListType, cc_list: Optional[RecipientListType], bcc_list: Optional[RecipientListType]):
+def process_email_addresses(account_email: str, sending_email: Optional[str], to_list: Union[List[str], str], cc_list: Union[List[str], str], bcc_list: Union[List[str], str]):
 
     if not to_list:
         raise ValueError("The email needs to be sent to someone. Please add a list to to_list.")
@@ -142,7 +142,7 @@ def process_email_addresses(account_email: str, sending_email: Optional[str], to
     return account_email, sending_email, recipients
 
 
-def process_email_body(body: str, html_body: str, tracker: bool, subject: str, recipients: Iterable[str], defines: dict):
+def process_email_body(body: str, html_body: str, tracker: bool, subject: str, recipients: dict, defines: dict):
     if tracker is not False:
         text = html_body or f'<pre style=\'font-size:14.667px;font-family:"Calibri"\'>{body or ""}</pre>'
         tracker_url = _add_tracker(subject, recipients, defines)
@@ -166,7 +166,7 @@ def process_email_body(body: str, html_body: str, tracker: bool, subject: str, r
     return body
 
 
-def process_attachments(attachments: AttachmentListType):
+def process_attachments(attachments: AttachmentListType) -> Iterable[dict]:
     attachments = attachments or []
     if not isinstance(attachments, list):
         attachments = [attachments]
@@ -224,12 +224,14 @@ def _log_email_failure(account_email: str, sending_email: str, password: str, da
     import inspect
 
     for frame in inspect.stack():
-        filepath = inspect.getmodule(frame[0]).__file__
-        if "pm_utilities" not in filepath:  # we want the first frame that calls pm_utilities
+        filepath = inspect.getmodule(frame[0])
+        if filepath is not None:
+            filepath_name = filepath.__file__
+        if "pm_utilities" not in filepath_name:  # we want the first frame that calls pm_utilities
             break
     with get_logging_conn(**database) as conn:
         cursor = conn.cursor()
-        cursor.execute(query, {"account_email": account_email, "sending_email": sending_email, "password": password, "filepath": filepath})
+        cursor.execute(query, {"account_email": account_email, "sending_email": sending_email, "password": password, "filepath": filepath_name})
         conn.commit()
 
 
@@ -281,19 +283,19 @@ def _add_tracker(subject: str, recipients: dict, defines):
 
 
 def main(
-    account_email: str=None,
-    sending_email: Optional[str]=None,
-    password: str=None,
-    to_list: RecipientListType=None,
-    cc_list: Optional[RecipientListType]=None,
-    bcc_list: Optional[RecipientListType]=None,
-    subject: Optional[str]=None,
-    body: Optional[str]=None,
-    html_body: Optional[str]=None,
-    attachments: AttachmentListType=None,
+    account_email: str="",
+    sending_email: str="",
+    password: str="",
+    to_list: RecipientListType=[],
+    cc_list: RecipientListType=[],
+    bcc_list: RecipientListType=[],
+    subject: str="",
+    body: str="",
+    html_body: str="",
+    attachments: AttachmentListType=[],
     importance: str="Normal",
     tracker: bool=False,
-    max_send_interval: Optional[str]=None,
+    max_send_interval: str="",
     defines: Union[dict, str]={},
 ):
     """
@@ -311,14 +313,14 @@ def main(
     :param tracker: If true, generates a CTA logo that will record IP addresses looking at the email (only on CTA network)
     :param defines: A dictionary of values to specify global values
     """
-    defines = process_defines(defines)
+    defines_dict = process_defines(defines)
     importance = importance.capitalize()
     account_email, sending_email, recipients = process_email_addresses(account_email, sending_email, to_list, cc_list, bcc_list)
-    body = process_email_body(body, html_body, tracker, subject, recipients, defines)
-    attachments = process_attachments(attachments)
+    body = process_email_body(body, html_body, tracker, subject, recipients, defines_dict)
+    processed_attachments = process_attachments(attachments)
 
-    _send(account_email, sending_email, password, subject, max_send_interval, body, recipients, importance, attachments, defines)
-    _log_email_success(subject, sending_email, recipients, defines['DATABASE'])
+    _send(account_email, sending_email, password, subject, max_send_interval, body, recipients, importance, processed_attachments, defines_dict)
+    _log_email_success(subject, sending_email, recipients, defines_dict['DATABASE'])
 
 
 if __name__ == '__main__':
