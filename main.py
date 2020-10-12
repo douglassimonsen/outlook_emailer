@@ -22,6 +22,9 @@ def get_logging_conn(
     username: str,
     password: str
 ) -> psycopg2.connect:
+    """
+    returns a standard psycopg2 connection for the database where you want to store your logs
+    """
     return psycopg2.connect(
         host=host,
         port=port,
@@ -85,6 +88,10 @@ def _send(
     attachments: Iterable[dict],
     defines: dict
 ) -> None:
+    """
+    This function does the actual sending of the email to the exchangelib server.
+    The function also does the checking if the email has already been sent, if applicable.
+    """
     def check_already_sent(account, interval, subject):
         tz = exchangelib.EWSTimeZone.localzone()
         if interval == "daily":
@@ -145,7 +152,14 @@ def process_email_addresses(
     cc_list: Union[List[str], str],
     bcc_list: Union[List[str], str]
 ) -> Tuple[str, str, Dict[str, List[str]]]:
-
+    """
+    Converts the various accepted forms for the email addresses into a standard
+    form for the rest of the program. You may enter any email with or without its
+    base email (eg, 'mwhamilton@gmail.com' or 'mwhamilton') and it will auto-add
+    the '@gmail.com' to any email without an '@' sign. You may also specify
+    a single recipient with just their address and this function will wrap that
+    string in a list.
+    """
     if not to_list:
         raise ValueError("The email needs to be sent to someone. Please add a list to to_list.")
 
@@ -178,6 +192,10 @@ def process_email_body(
     recipients: dict,
     defines: dict
 ):
+    """
+    Handles adding a tracker to the email and converting a string representation
+    of an htmlbody to the exchangelib representation.
+    """
     if tracker is not False:
         text = html_body or f'<pre style=\'font-size:14.667px;font-family:"Calibri"\'>{body or ""}</pre>'
         tracker_url = _add_tracker(subject, recipients, defines)
@@ -202,6 +220,12 @@ def process_email_body(
 
 
 def process_attachments(attachments: AttachmentListType) -> Iterable[dict]:
+    """
+    Standardizes the attachments for the rest of the program.
+    You may specify a single attachment as either a dictionary (with keys name: str and buffer: io.BytesIO)
+    or a string, which will be interpreted as a path. This function will convert them into a list
+    of dictionaries with the name and buffer keys.
+    """
     attachments = attachments or []
     if not isinstance(attachments, list):
         attachments = [attachments]  # type: ignore
@@ -217,6 +241,10 @@ def process_attachments(attachments: AttachmentListType) -> Iterable[dict]:
 
 
 def process_defines(defines: Union[dict, str]) -> dict:
+    """
+    This function will read the defines from a path if you specified the defines
+    as a string.
+    """
     if isinstance(defines, str):
         with open(defines, 'r') as f:
             if defines.endswith(".yaml"):
@@ -234,6 +262,10 @@ def _log_email_success(
     recipients: Iterable[str],
     database: dict
 ) -> None:
+    """
+    Enters basic information about the email into the database if the email
+    was sent successfully.
+    """
     process = psutil.Process(os.getpid())
     process_parents = []
     while process is not None:
@@ -262,6 +294,10 @@ def _log_email_failure(
     password: str,
     database: dict
 ) -> None:
+    """
+    Enters basic information about the email into the database if the email
+    was not sent successfully.
+    """
     query = """
     insert into public.email_failures (account_email, sending_email, password, filepath)
     values (%(account_email)s, %(sending_email)s, %(password)s, %(filepath)s)
@@ -285,6 +321,10 @@ def _add_tracker(
     recipients: dict,
     defines: dict
 ) -> str:
+    """
+    Adds rows into tables in the database corresponding to the subject and recipients.
+    Then returns a url which the tracker_site will use to log the opening of the email.
+    """
     tmp_recipients = ";".join(sorted(set(x.split("@", 1)[0] for x in recipients["to"] + recipients["cc"] + recipients["bcc"])))
 
     subject_query = """
@@ -348,6 +388,8 @@ def main(
     defines: Union[dict, str]={},
 ) -> None:
     """
+    Simply sends an exchangelib email, without fuss
+
     :param account_email: The account to access outlook
     :param sending_email: The account to send the email from. Defaults to account_email
     :param password: The password for the account_email. If None, pm_utilities will try to automatically determine it.
