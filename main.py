@@ -9,23 +9,27 @@ import io
 import sys
 import json
 import psycopg2
+from typing import Iterable, Union, Optional
+
+AttachmentListType = Optional[Iterable[Union[str, dict]]]
+RecipientListType = Union[Iterable[str], str]
 
 
-def get_logging_conn(database):
+def get_logging_conn(host: str, port: Union[str, int], database: str, username: str, password: str):
     return psycopg2.connect(
-        host=database['HOST'],
-        port=database['PORT'],
-        database=database['DATABASE'],
-        user=database['USERNAME'],
-        password=database['PASSWORD'],
+        host=host,
+        port=port,
+        database=database,
+        user=username,
+        password=password,
     )
 
 
-def get_exchangelib_account(access_account=None, inbox_account=None, password=None, defines={}):
+def get_exchangelib_account(access_account: str=None, inbox_account: Optional[str]=None, password: str=None, defines: dict={}):
     """
     :param access_account: the name of the email addr you are accessing from
     :inbox_account: the name of the email addr that will appear in the from. If None, then it defaults to access_account
-    :password: the password for the access_account. If none, pm_utilities will try to figure it out
+    :password: the password for the access_account
     """
 
     inbox_account = inbox_account or access_account
@@ -58,7 +62,7 @@ def get_exchangelib_account(access_account=None, inbox_account=None, password=No
         raise AttributeError("It seems like the username is wrong")
 
 
-def _send(account_email, sending_email, password, subject, max_send_interval, body, recipients, importance, attachments, defines):
+def _send(access_account: str, sending_email: str, password: str, subject: str, max_send_interval: Optional[int], body: str, recipients: dict, importance: str, attachments: AttachmentListType, defines: dict):
     def check_already_sent(account, interval, subject):
         tz = exchangelib.EWSTimeZone.localzone()
         if interval == "daily":
@@ -71,7 +75,7 @@ def _send(account_email, sending_email, password, subject, max_send_interval, bo
         cnt = account.sent.filter(datetime_received__gte=threshold_dt, subject=subject).count()
         return cnt > 0
 
-    account = get_exchangelib_account(access_account=account_email, inbox_account=sending_email, password=password)
+    account = get_exchangelib_account(access_account=access_account, inbox_account=sending_email, password=password, defines=defines)
 
     if max_send_interval is not None:
         # This is not perfect. If you try to send an email multiple times in a very quick succession (like <2 seconds between), you can still get duplicates. This is an
@@ -112,7 +116,7 @@ def _send(account_email, sending_email, password, subject, max_send_interval, bo
         raise ValueError("Couldn't send email to server")
 
 
-def process_email_addresses(account_email, sending_email, to_list, cc_list, bcc_list):
+def process_email_addresses(account_email: str, sending_email: Optional[str], to_list: RecipientListType, cc_list: Optional[RecipientListType], bcc_list: Optional[RecipientListType]):
 
     if not to_list:
         raise ValueError("The email needs to be sent to someone. Please add a list to to_list.")
@@ -124,7 +128,7 @@ def process_email_addresses(account_email, sending_email, to_list, cc_list, bcc_
         sending_email += "@transitchicago.com"
 
     recipients = {
-        "to": to_list or [],
+        "to": to_list,
         "cc": cc_list or [],
         "bcc": bcc_list or [],
     }
@@ -138,7 +142,7 @@ def process_email_addresses(account_email, sending_email, to_list, cc_list, bcc_
     return account_email, sending_email, recipients
 
 
-def process_email_body(body, html_body, tracker, subject, recipients, defines):
+def process_email_body(body: str, html_body: str, tracker: bool, subject: str, recipients: Iterable[str], defines: dict):
     if tracker is not False:
         text = html_body or f'<pre style=\'font-size:14.667px;font-family:"Calibri"\'>{body or ""}</pre>'
         tracker_url = _add_tracker(subject, recipients, defines)
@@ -162,7 +166,7 @@ def process_email_body(body, html_body, tracker, subject, recipients, defines):
     return body
 
 
-def process_attachments(attachments):
+def process_attachments(attachments: AttachmentListType):
     attachments = attachments or []
     if not isinstance(attachments, list):
         attachments = [attachments]
@@ -177,7 +181,7 @@ def process_attachments(attachments):
     return attachments  # you might think you can just remove the return because it's being edited in place. The case were attachments is None causes this to fail
 
 
-def process_defines(defines):
+def process_defines(defines: Union[dict, str]):
     if isinstance(defines, str):
         with open(defines, 'r') as f:
             if defines.endswith(".yaml"):
@@ -189,13 +193,13 @@ def process_defines(defines):
     raise ValueError("The defines should either be a dictionary, or a path to a JSON or YAML")
 
 
-def _log_email_success(subject, sending_email, recipients, database):
+def _log_email_success(subject: str, sending_email: str, recipients: Iterable[str], database: dict):
     process = psutil.Process(os.getpid())
     process_parents = []
     while process is not None:
         process_parents.append(process.name())
         process = process.parent()
-    with get_logging_conn(database) as conn:
+    with get_logging_conn(**database) as conn:
         cursor = conn.cursor()
         cursor.execute(
             """insert into public.email_successes (subject, sender, time_sent, to_list, filepath, processes)
@@ -212,7 +216,7 @@ def _log_email_success(subject, sending_email, recipients, database):
         conn.commit()
 
 
-def _log_email_failure(account_email, sending_email, password, database):
+def _log_email_failure(account_email: str, sending_email: str, password: str, database: dict):
     query = """
     insert into public.email_failures (account_email, sending_email, password, filepath)
     values (%(account_email)s, %(sending_email)s, %(password)s, %(filepath)s)
@@ -223,19 +227,14 @@ def _log_email_failure(account_email, sending_email, password, database):
         filepath = inspect.getmodule(frame[0]).__file__
         if "pm_utilities" not in filepath:  # we want the first frame that calls pm_utilities
             break
-    with get_logging_conn(database) as conn:
+    with get_logging_conn(**database) as conn:
         cursor = conn.cursor()
         cursor.execute(query, {"account_email": account_email, "sending_email": sending_email, "password": password, "filepath": filepath})
         conn.commit()
 
 
-def _add_tracker(subject, recipients, defines):
-    if isinstance(recipients, dict):
-        tmp_recipients = ";".join(sorted(set(x.split("@", 1)[0] for x in recipients["to"] + recipients["cc"] + recipients["bcc"])))
-    elif isinstance(recipients, list):
-        tmp_recipients = ";".join(recipients)
-    else:
-        tmp_recipients = recipients
+def _add_tracker(subject: str, recipients: dict, defines):
+    tmp_recipients = ";".join(sorted(set(x.split("@", 1)[0] for x in recipients["to"] + recipients["cc"] + recipients["bcc"])))
 
     subject_query = """
     select index from public.email_subject_detail where subject = %(subject)s
@@ -258,7 +257,7 @@ def _add_tracker(subject, recipients, defines):
     insert_recipient = """
     insert into public.email_recipients_detail (index, recipients) values (%(index)s, %(recipients)s)
     """
-    with get_logging_conn(defines['DATABASE']) as conn:
+    with get_logging_conn(**defines['DATABASE']) as conn:
         subject_index = pandas.read_sql(subject_query, conn, params={"subject": subject})
         if subject_index.shape[0] == 0:
             subject_index_val = int(pandas.read_sql(max_subject, conn)["mx"].iloc[0] or 0) + 1
@@ -282,20 +281,20 @@ def _add_tracker(subject, recipients, defines):
 
 
 def main(
-    account_email=None,
-    sending_email=None,
-    password=None,
-    to_list=None,
-    cc_list=None,
-    bcc_list=None,
-    subject=None,
-    body=None,
-    html_body=None,
-    attachments=None,
-    importance="Normal",
-    tracker=False,
-    max_send_interval=None,
-    defines={},
+    account_email: str=None,
+    sending_email: Optional[str]=None,
+    password: str=None,
+    to_list: RecipientListType=None,
+    cc_list: Optional[RecipientListType]=None,
+    bcc_list: Optional[RecipientListType]=None,
+    subject: Optional[str]=None,
+    body: Optional[str]=None,
+    html_body: Optional[str]=None,
+    attachments: AttachmentListType=None,
+    importance: str="Normal",
+    tracker: bool=False,
+    max_send_interval: Optional[str]=None,
+    defines: Union[dict, str]={},
 ):
     """
     :param account_email: The account to access outlook

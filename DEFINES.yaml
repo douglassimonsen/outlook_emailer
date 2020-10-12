@@ -3,11 +3,11 @@ EMAIL_PASSWORD: <password>
 SEND_ATTEMPTS: 5
 SLEEP_BETWEEN_SEND_ATTEMPTS: 1
 DATABASE:
-  HOST: <host>
-  PORT: <port>
-  DATABASE: <database>
-  USERNAME: <username>
-  PASSWORD: <password>
+  host: <host>
+  port: <port>
+  database: <database>
+  username: <username>
+  password: <password>
 TRACKER:
   COVER_IMAGE_URL: <full url to cover image>
   TRACKER_BASE_URL: <partial url to tracking url>
