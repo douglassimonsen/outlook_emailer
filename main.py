@@ -371,7 +371,7 @@ def _add_tracker(
     return f"{defines['TRACKER']['TRACKER_BASE_URL']}/logo_{recipient_index_val}_{subject_index_val}.png"
 
 
-def main(
+def send_email(
     account_email: str="",
     sending_email: str="",
     password: str="",
