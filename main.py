@@ -104,6 +104,7 @@ def _send(
         cnt = account.sent.filter(datetime_received__gte=threshold_dt, subject=subject).count()
         return cnt > 0
 
+    password = password or defines['EMAIL_PASSWORD']
     account = get_exchangelib_account(access_account=access_account, inbox_account=sending_email, password=password, defines=defines)
 
     if max_send_interval is not None:
@@ -392,7 +393,7 @@ def send_email(
 
     :param account_email: The account to access outlook
     :param sending_email: The account to send the email from. Defaults to account_email
-    :param password: The password for the account_email. If None, pm_utilities will try to automatically determine it.
+    :param password: The password for the account_email. If None, will default to the EMAIL_PASSWORD in DEFINES.yaml.
     :param to_list: A list of email addresses. If the email has no '@', will append '@transitchicago.com'
     :param cc_list: A list of email addresses. If the email has no '@', will append '@transitchicago.com'
     :param bcc_list: A list of email addresses. If the email has no '@', will append '@transitchicago.com'
@@ -415,11 +416,14 @@ def send_email(
 
 
 if __name__ == '__main__':
-    main(
+    send_email(
         account_email='mhamilton',
         password='Password8',
-        subject='aNone',
-        body='hi',
+        subject='Just a Test',
+        html_body='''
+            <p>hi</p>
+            <p style="background-color='blue'">Goodbye</p>
+        ''',
         tracker=True,
         importance='high',
         to_list=['mhamilton'],
