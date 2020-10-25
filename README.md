@@ -1,4 +1,4 @@
-A tool for easily sending emails via exchangelib. Includes logging and automatic tracker. To use yourself, you must fill in DEFINES.yaml with the appropriate values.
+A tool for easily sending emails via exchangelib. Includes logging and automatic tracker. To use yourself, you must fill in `DEFINES.yaml` with the appropriate values.
 
 The program contains two functions designed for public consumption:
 * main.send_email
