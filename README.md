@@ -1,8 +1,8 @@
 A tool for easily sending emails via exchangelib. Includes logging and automatic tracker. To use yourself, you must fill in `DEFINES.yaml` with the appropriate values.
 
 The program contains two functions designed for public consumption:
-* main.send_email
-* main.get_exchangelib_account
+* `main.send_email`
+* `main.get_exchangelib_account`
 
 ## main.send_email
 This function is the main function of the program. It is designed to provide a simple API for non-developers to send emails automatically. It implements all basic email functionality, as well as:
