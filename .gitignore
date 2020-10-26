@@ -1,2 +1,4 @@
 *.pyc
 *.db
+outlook_emailer.egg-info
+*.tar.gz

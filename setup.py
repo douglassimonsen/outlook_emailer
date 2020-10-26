@@ -2,11 +2,11 @@ import setuptools
 
 
 setuptools.setup(
-    name="excel_to_html",
-    packages=['emailer'],
+    name="outlook_emailer",
+    packages=['outlook_emailer'],
     version="1.0.0",
-    description="A package that converts excel sheets to HTML tables",
-    url="https://github.com/mwhamilton/excel_to_html",
+    description="A package that provides a simple way of sending emails through Microsoft Exchange",
+    url="https://github.com/mwhamilton/outlook_emailer",
     download_url="https://github.com/mwhamilton/outlook_emailer/archive/1.0.0.tar.gz",
     author="Matthew Hamilton",
     author_email="mwhamilton6@gmail.com",
