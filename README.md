@@ -14,7 +14,7 @@ This function is the main function of the program. It is designed to provide a s
 
 ```python
 send_email(
-    account_email='mhamilton',
+    account_email='<email_addr>',
     subject='Just a Test',
     html_body='''
         <p>hi</p>
@@ -22,7 +22,7 @@ send_email(
     ''',
     tracker=True,
     importance='high',
-    to_list=['mhamilton'],
+    to_list=['<email_addr>'],
     defines='DEFINES.yaml'
 )
 ```
@@ -41,7 +41,7 @@ defines = {
         'password': 'pass',
     },
 }
-get_exchangelib_account('mwhamilton', 'group_email', 'password', defines)
+get_exchangelib_account('<email_addr>', 'group_email', 'password', defines)
 ```
 
 ## DEFINES example

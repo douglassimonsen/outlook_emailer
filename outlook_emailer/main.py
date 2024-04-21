@@ -156,7 +156,7 @@ def process_email_addresses(
     """
     Converts the various accepted forms for the email addresses into a standard
     form for the rest of the program. You may enter any email with or without its
-    base email (eg, 'mwhamilton@gmail.com' or 'mwhamilton') and it will auto-add
+    base email (eg, '<email_addr>@gmail.com' or '<email_addr>') and it will auto-add
     the '@gmail.com' to any email without an '@' sign. You may also specify
     a single recipient with just their address and this function will wrap that
     string in a list.
@@ -166,9 +166,9 @@ def process_email_addresses(
 
     sending_email = sending_email or account_email
     if "@" not in account_email:
-        account_email += "@transitchicago.com"
+        account_email += "@gmail.com"
     if "@" not in sending_email:
-        sending_email += "@transitchicago.com"
+        sending_email += "@gmail.com"
 
     recipients = {
         "to": to_list,
@@ -180,7 +180,7 @@ def process_email_addresses(
             recipients[lst_name] = [lst]
         for i in range(len(recipients[lst_name] or [])):
             if "@" not in recipients[lst_name][i]:
-                recipients[lst_name][i] += "@transitchicago.com"  # type: ignore
+                recipients[lst_name][i] += "@gmail.com"  # type: ignore
 
     return account_email, sending_email, recipients  # type: ignore
 
@@ -305,12 +305,13 @@ def _log_email_failure(
     """
     import inspect
 
+    filepath_name = None
     for frame in inspect.stack():
         filepath = inspect.getmodule(frame[0])
         if filepath is not None:
             filepath_name = filepath.__file__
-        if "pm_utilities" not in filepath_name:  # we want the first frame that calls pm_utilities
-            break
+    if filepath_name is None:
+        raise ValueError("Path name cannot be None. Are you running this in a Jupyter Notebook? Don't.")
     with get_logging_conn(**database) as conn:
         cursor = conn.cursor()
         cursor.execute(query, {"account_email": account_email, "sending_email": sending_email, "password": password, "filepath": filepath_name})
@@ -394,9 +395,9 @@ def send_email(
     :param account_email: The account to access outlook
     :param sending_email: The account to send the email from. Defaults to account_email
     :param password: The password for the account_email. If None, will default to the EMAIL_PASSWORD in DEFINES.yaml.
-    :param to_list: A list of email addresses. If the email has no '@', will append '@transitchicago.com'
-    :param cc_list: A list of email addresses. If the email has no '@', will append '@transitchicago.com'
-    :param bcc_list: A list of email addresses. If the email has no '@', will append '@transitchicago.com'
+    :param to_list: A list of email addresses. If the email has no '@', will append '@gmail.com'
+    :param cc_list: A list of email addresses. If the email has no '@', will append '@gmail.com'
+    :param bcc_list: A list of email addresses. If the email has no '@', will append '@gmail.com'
     :param subject: A string representing the subject
     :param body: A string of raw text
     :param html_body: A html formatted string
@@ -417,7 +418,7 @@ def send_email(
 
 if __name__ == '__main__':
     send_email(
-        account_email='mhamilton',
+        account_email='<email_addr>',
         password='Password8',
         subject='Just a Test',
         html_body='''
@@ -426,6 +427,6 @@ if __name__ == '__main__':
         ''',
         tracker=True,
         importance='high',
-        to_list=['mhamilton'],
+        to_list=['<email_addr>'],
         defines='DEFINES.yaml'
     )

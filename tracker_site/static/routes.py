@@ -1,9 +1,17 @@
+from typing import Optional
 from application import application, cache
-import pm_utilities.general_utilities
 import flask
 import pandas
 import io
 import time
+import os
+import json
+import psycopg2
+from psycopg2.extensions import connection
+
+def get_conn() -> connection:
+    creds = json.loads(os.environ["EMAIL_DB_CREDS"])
+    return psycopg2.connect(**creds)
 
 
 @application.route('/logo.png')
@@ -38,7 +46,7 @@ def render_logo(info):
         and ip_addr = %(ip_addr)s
         and time_received = %(time_received)s
         '''
-        with pm_utilities.general_utilities.get_server_db_conn() as conn:
+        with get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(query, {
                 "recipient": name,
@@ -54,7 +62,7 @@ def render_logo(info):
         insert into public.email_tracking (recipient, subject, ip_addr, time_received)
         values (%(recipient)s, %(subject)s, %(ip_addr)s, %(time_received)s)
         '''
-        with pm_utilities.general_utilities.get_server_db_conn() as conn:
+        with get_conn() as conn:
             cursor = conn.cursor()
             cursor.execute(query, {
                 "recipient": name,
@@ -67,12 +75,12 @@ def render_logo(info):
     time_received = pandas.Timestamp(time.time(), unit='s', tz='America/Chicago')
     info = info.split('_')
     len_info = len(info)
-    name = info[0] if len_info >= 1 else None
-    subject = info[1] if len_info >= 2 else None
+    name: Optional[str] = info[0] if len_info >= 1 else None
+    subject: Optional[str] = info[1] if len_info >= 2 else None
     if flask.request.environ.get('HTTP_X_FORWARDED_FOR') is None:
-        ip = flask.request.environ['REMOTE_ADDR']
+        ip: str = flask.request.environ['REMOTE_ADDR']
     else:
-        ip = flask.request.environ.get('HTTP_X_FORWARDED_FOR', flask.request.remote_addr or '')
+        ip: str = flask.request.environ.get('HTTP_X_FORWARDED_FOR', flask.request.remote_addr or '')
 
     save_info()
     resp = flask.Response(flask.stream_with_context(get_data()), mimetype='image/png')
