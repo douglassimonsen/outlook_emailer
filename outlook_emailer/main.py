@@ -1,3 +1,4 @@
+import exchangelib.errors
 import exchangelib
 import datetime
 import os
@@ -9,10 +10,17 @@ import io
 import sys
 import json
 import psycopg2
-from typing import Iterable, Union, Optional, List, Tuple, Dict
+from typing import Iterable, Union, Optional, List, Tuple, TypedDict, cast
 
-AttachmentListType = Union[Iterable[Union[str, dict]], dict, str]
-RecipientListType = Union[List[str], str]
+class Recipients(TypedDict):
+    to: Optional[list[str]]
+    cc: Optional[list[str]]
+    bcc: Optional[list[str]]
+
+
+class Attachement(TypedDict):
+    name: str
+    buffer: io.TextIOWrapper
 
 
 def get_logging_conn(
@@ -83,9 +91,9 @@ def _send(
     subject: str,
     max_send_interval: str,
     body: str,
-    recipients: dict,
+    recipients: Recipients,
     importance: str,
-    attachments: Iterable[dict],
+    attachments: Iterable[Attachement],
     defines: dict
 ) -> None:
     """
@@ -139,7 +147,7 @@ def _send(
         try:
             email.send_and_save()
             break
-        except:
+        except Exception:
             print(f"Attempt {i} failed to send to server.")
             time.sleep(defines['SLEEP_BETWEEN_SEND_ATTEMPTS'])
     else:
@@ -149,10 +157,10 @@ def _send(
 def process_email_addresses(
     account_email: str,
     sending_email: Optional[str],
-    to_list: Union[List[str], str],
-    cc_list: Union[List[str], str],
-    bcc_list: Union[List[str], str]
-) -> Tuple[str, str, Dict[str, List[str]]]:
+    to_list: List[str] | str,
+    cc_list: List[str] | str,
+    bcc_list:List[str] | str
+) -> Tuple[str, str, Recipients]:
     """
     Converts the various accepted forms for the email addresses into a standard
     form for the rest of the program. You may enter any email with or without its
@@ -164,17 +172,18 @@ def process_email_addresses(
     if not to_list:
         raise ValueError("The email needs to be sent to someone. Please add a list to to_list.")
 
+    # if the sending_email isn't specified, we assume we should send from the log-in email
     sending_email = sending_email or account_email
     if "@" not in account_email:
         account_email += "@gmail.com"
     if "@" not in sending_email:
         sending_email += "@gmail.com"
 
-    recipients = {
+    recipients: Recipients = {
         "to": to_list,
         "cc": cc_list or [],
         "bcc": bcc_list or [],
-    }
+    }  # type: ignore
     for lst_name, lst in recipients.items():
         if isinstance(lst, str):
             recipients[lst_name] = [lst]
@@ -190,7 +199,7 @@ def process_email_body(
     html_body: str,
     tracker: bool,
     subject: str,
-    recipients: dict,
+    recipients: Recipients,
     defines: dict
 ):
     """
@@ -220,7 +229,7 @@ def process_email_body(
     return body
 
 
-def process_attachments(attachments: AttachmentListType) -> Iterable[dict]:
+def process_attachments(attachments: list[Attachement]) -> list[Attachement]:
     """
     Standardizes the attachments for the rest of the program.
     You may specify a single attachment as either a dictionary (with keys name: str and buffer: io.BytesIO)
@@ -237,7 +246,7 @@ def process_attachments(attachments: AttachmentListType) -> Iterable[dict]:
             with open(attachment, "rb") as input_file:
                 f = io.BytesIO(input_file.read())
             f.seek(0)  # important, otherwise, exchangelib will start reading from the end of the file and think it's empty
-            attachments[i] = {"name": os.path.basename(attachment), "buffer": f}
+            attachments[i] = cast(Attachement, {"name": os.path.basename(attachment), "buffer": f})
     return attachments  # type: ignore  # you might think you can just remove the return because it's being edited in place. The case were attachments is None causes this to fail
 
 
@@ -320,14 +329,14 @@ def _log_email_failure(
 
 def _add_tracker(
     subject: str,
-    recipients: dict,
+    recipients: Recipients,
     defines: dict
 ) -> str:
     """
     Adds rows into tables in the database corresponding to the subject and recipients.
     Then returns a url which the tracker_site will use to log the opening of the email.
     """
-    tmp_recipients = ";".join(sorted(set(x.split("@", 1)[0] for x in recipients["to"] + recipients["cc"] + recipients["bcc"])))
+    tmp_recipients = ";".join(sorted(set(x.split("@", 1)[0] for x in recipients["to"] + recipients["cc"] + recipients["bcc"])))  # type: ignore
 
     subject_query = """
     select index from public.email_subject_detail where subject = %(subject)s
@@ -377,17 +386,17 @@ def send_email(
     account_email: str="",
     sending_email: str="",
     password: str="",
-    to_list: RecipientListType=[],
-    cc_list: RecipientListType=[],
-    bcc_list: RecipientListType=[],
+    to_list: list[str]=[],
+    cc_list: list[str]=[],
+    bcc_list: list[str]=[],
     subject: str="",
     body: str="",
     html_body: str="",
-    attachments: AttachmentListType=[],
+    attachments: list[Attachement]=[],
     importance: str="Normal",
     tracker: bool=False,
     max_send_interval: str="",
-    defines: Union[dict, str]={},
+    defines: dict | str={},
 ) -> None:
     """
     Simply sends an exchangelib email, without fuss
